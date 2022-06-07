@@ -7,7 +7,7 @@ from bluesky_widgets.models.plot_specs import Axes, Figure
 # underlying_plan xafs trans/fluorescence/ref
 
 
-class AutoBMMPlot(AutoPlotter):
+class AutoSRXPlot(AutoPlotter):
     def __init__(self):
         super().__init__()
         self._models = {}

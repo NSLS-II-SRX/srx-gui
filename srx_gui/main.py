@@ -9,7 +9,7 @@ from .settings import SETTINGS
 def main(argv=None):
     print(__doc__)
 
-    parser = argparse.ArgumentParser(description="Ariadne: acquisition GUI for NSLS-II BMM beamline")
+    parser = argparse.ArgumentParser(description="SRX GUI: acquisition GUI for NSLS-II SRX beamline")
     parser.add_argument("--zmq", help="0MQ address")
     parser.add_argument(
         "--kafka-servers",
@@ -22,7 +22,7 @@ def main(argv=None):
     parser.add_argument("--catalog", help="Databroker catalog")
     args = parser.parse_args(argv)
 
-    with gui_qt("Ariadne"):
+    with gui_qt("SRX GUI"):
         if args.catalog:
             import databroker
 

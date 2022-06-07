@@ -16,7 +16,7 @@ from bluesky_kafka import RemoteDispatcher
 from bluesky_widgets.headless.figures import HeadlessFigures
 from bluesky_widgets.models.utils import run_is_live_and_not_completed
 
-from .plots import AutoBMMPlot
+from .plots import AutoSRXPlot
 
 
 def auto_plot(catalog, uid, fill="yes", streaming=False):
@@ -30,7 +30,7 @@ def auto_plot(catalog, uid, fill="yes", streaming=False):
 
 def export_thumbnails_when_complete(run):
     "Given a BlueskyRun, export thumbnail(s) to a directory when it completes."
-    model = AutoBMMPlot()
+    model = AutoSRXPlot()
     model.add_run(run)
     view = HeadlessFigures(model.figures)
 
@@ -53,7 +53,7 @@ def export_thumbnails_when_complete(run):
 
 def export_thumbnails_streaming(run):
     "Given a BlueskyRun, export thumbnail(s) to a directory while it updates."
-    model = AutoBMMPlot()
+    model = AutoSRXPlot()
     model.add_run(run)
     view = HeadlessFigures(model.figures)
 

@@ -22,20 +22,21 @@ class RunAndView:
 
 
 class SearchAndView:
-    def __init__(self, search, databroker_auto_plot_builder):
-        self.search = search
+    def __init__(self, databroker_auto_plot_builder):
+        # def __init__(self, search, databroker_auto_plot_builder):
+        # self.search = search
         self.databroker_auto_plot_builder = databroker_auto_plot_builder
-        self.search.events.view.connect(self._on_view)
+        # self.search.events.view.connect(self._on_view)
 
         self._figures_to_lines = {}
         self.databroker_auto_plot_builder.figures.events.added.connect(self._on_figure_added)
 
-    def _on_view(self, event):
-        catalog = self.search.selection_as_catalog
-        if catalog is None:
-            return
-        for uid, run in catalog.items():
-            self.databroker_auto_plot_builder.add_run(run)
+    # def _on_view(self, event):
+    # catalog = self.search.selection_as_catalog
+    # if catalog is None:
+    #     return
+    # for uid, run in catalog.items():
+    #     self.databroker_auto_plot_builder.add_run(run)
 
     def _on_figure_added(self, event):
         figure = event.item

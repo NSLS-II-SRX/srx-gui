@@ -31,7 +31,8 @@ from qtpy.QtWidgets import (
 from qtpy.QtCore import Qt
 
 from .models import RunAndView, SearchAndView
-from .widget_xafs import PlanEditorXafs
+
+# from .widget_xafs import PlanEditorXafs
 
 
 class QtSearchWithButton(QWidget):
@@ -146,9 +147,9 @@ class QtSearchAndView(QWidget):
         self.model = model
         layout = QHBoxLayout()
         self.setLayout(layout)
-        layout.addWidget(QtSearchWithButton(model.search))
+        # layout.addWidget(QtSearchWithButton(model.search))
         plot_layout = QVBoxLayout()
-        plot_layout.addWidget(QtAddCustomPlot(self.model))
+        # plot_layout.addWidget(QtAddCustomPlot(self.model))
         plot_layout.addWidget(QtFigures(model.databroker_auto_plot_builder.figures))
         layout.addLayout(plot_layout)
 
@@ -191,21 +192,21 @@ class QtOrganizeQueueLeft(QSplitter):
 
         self.setOrientation(Qt.Vertical)
 
-        self._frame_top = QFrame(self)
-        self._frame_top.setFrameShape(QFrame.StyledPanel)
+        # self._frame_top = QFrame(self)
+        # self._frame_top.setFrameShape(QFrame.StyledPanel)
 
         self._frame_bottom = QFrame(self)
         self._frame_bottom.setFrameShape(QFrame.StyledPanel)
 
-        self.addWidget(self._frame_top)
+        # self.addWidget(self._frame_top)
         self.addWidget(self._frame_bottom)
 
-        self._plan_editor = PlanEditorXafs(model)
+        # self._plan_editor = PlanEditorXafs(model)
         self._plan_history = QtRePlanQueue(model)
 
-        vbox = QVBoxLayout()
-        vbox.addWidget(self._plan_editor, stretch=1)
-        self._frame_top.setLayout(vbox)
+        # vbox = QVBoxLayout()
+        # vbox.addWidget(self._plan_editor, stretch=1)
+        # self._frame_top.setLayout(vbox)
 
         vbox = QVBoxLayout()
         vbox.addWidget(self._plan_history, stretch=1)
@@ -300,5 +301,6 @@ class QtViewer(QTabWidget):
         self._organize_queue = QtOrganizeQueue(model.run_engine)
         self.addTab(self._organize_queue, "Organize Queue")
 
-        self._search_and_view = QtSearchAndView(SearchAndView(model.search, model.databroker_auto_plot_builder))
+        # self._search_and_view = QtSearchAndView(SearchAndView(model.search, model.databroker_auto_plot_builder))
+        self._search_and_view = QtSearchAndView(SearchAndView(model.databroker_auto_plot_builder))
         self.addTab(self._search_and_view, "Data Broker")

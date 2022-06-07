@@ -8,10 +8,11 @@ from bluesky_widgets.qt import Window
 # from bluesky_widgets.models.auto_plot_builders import AutoPlotter
 
 from .widgets import QtViewer
-from .models import SearchWithButton
+
+# from .models import SearchWithButton
 from .settings import SETTINGS
 
-from .plots import AutoBMMPlot
+from .plots import AutoSRXPlot
 
 
 class ViewerModel:
@@ -20,11 +21,11 @@ class ViewerModel:
     """
 
     def __init__(self):
-        self.search = SearchWithButton(SETTINGS.catalog, columns=SETTINGS.columns)
+        # self.search = SearchWithButton(SETTINGS.catalog, columns=SETTINGS.columns)
         # auto_plot_builder for live plotting
-        self.live_auto_plot_builder = AutoBMMPlot()
+        self.live_auto_plot_builder = AutoSRXPlot()
         # auto_plot_builder for databroker plotting
-        self.databroker_auto_plot_builder = AutoBMMPlot()
+        self.databroker_auto_plot_builder = AutoSRXPlot()
 
         self.run_engine = RunEngineClient(zmq_server_address=os.environ.get("QSERVER_ZMQ_ADDRESS", None))
 
@@ -86,9 +87,9 @@ class Viewer(ViewerModel):
         # Customize Run Engine model for BMM:
         #   - name of the module that contains custom code modules
         #     (conversion of spreadsheets to sequences of plans)
-        self.run_engine.qserver_custom_module_name = "bluesky-httpserver-bmm"
+        # self.run_engine.qserver_custom_module_name = "bluesky-httpserver-bmm"
         #   - list of names of spreadsheet types
-        self.run_engine.plan_spreadsheet_data_types = ["wheel_xafs"]
+        # self.run_engine.plan_spreadsheet_data_types = ["wheel_xafs"]
 
         widget = QtViewer(self)
         self._window = Window(widget, show=show)
