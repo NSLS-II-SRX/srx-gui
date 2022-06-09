@@ -5,7 +5,12 @@
 # - Copy 'srx-gui/tests/config/kafka.yml' to '~/.config/bluesky/kafka.yml'
 # - set valid path to Bluesky Kafka config:
 #   BLUESKY_KAFKA_CONFIG_PATH=~/.config/bluesky/kafka.yml
+# - Start Kafka: set 'srx-gui/tests/config' as a current directory and run
+#   sudo docker-compose -f bitnami-kafka-docker-compose.yml up
+# - Start GUI:
+#   srx-gui --kafka-servers localhost:9092 --kafka-topics srx.bluesky.runengine.documents
 
+import os
 from bluesky import RunEngine
 
 RE = RunEngine()
@@ -29,7 +34,7 @@ RE.subscribe(bec)
 from bluesky.utils import PersistentDict
 from pathlib import Path
 
-runengine_metadata_dir = Path("~/.config/bluesky/persistent_dict")
+runengine_metadata_dir = Path(os.path.expanduser("~/.config/bluesky/persistent_dict"))
 RE.md = PersistentDict(runengine_metadata_dir)
 
 from bluesky_kafka.utils import create_topics, list_topics
@@ -42,7 +47,6 @@ if topic not in list_topics(bootstrap_servers):
 else:
     print(f"Kafka topic {topic!r} already exists")
 
-import os
 from nslsii import configure_kafka_publisher
 
 kafka_config_path = "~/.config/bluesky/kafka.yml"

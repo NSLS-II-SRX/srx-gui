@@ -29,6 +29,9 @@ roi_pv.put([])
 
 
 def scan_and_fly_base(detectors, xstart, xstop, xnum, ystart, ystop, ynum, dwell, *, md=None, snake=False):
+    """
+    Starting the plan: RE(scan_and_fly_base([det1], 0, 1, 15, 0, 2, 5, 0.1, snake=False))
+    """
 
     # Set metadata
     md = md or {}

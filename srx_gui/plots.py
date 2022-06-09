@@ -138,12 +138,12 @@ class AutoSRXPlot(AutoPlotter):
 
     def calc_field(self, run):  ##
         print(f"'calc_field' called ...")
-        print(f"start={run._document_cache.start_doc}")
+        # print(f"start={run._document_cache.start_doc}")
         nx, ny = run._document_cache.start_doc["scan"]["shape"]
         data = run[monitored_stream_name].to_dask().load()
-        print(f"data[monitored_line]={data[monitored_line]}")
-        print(f"data[index_count]={data['index_count']}")
-        print(f"data[reset_count]={data['reset_count']}")
+        # print(f"data[monitored_line]={data[monitored_line]}")
+        # print(f"data[index_count]={data['index_count']}")
+        # print(f"data[reset_count]={data['reset_count']}")
         img_data = data[monitored_line]
         n_total = nx * ny
         if len(img_data) > n_total:
