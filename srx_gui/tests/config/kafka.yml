@@ -1,0 +1,12 @@
+---
+  abort_run_on_kafka_exception: True
+  bootstrap_servers:
+    - localhost:9092
+  runengine_producer_config:
+      security.protocol: PLAINTEXT
+      # sasl.mechanisms: PLAIN
+      # sasl.username: beamline
+      # sasl.username: beamline
+      # sasl.password: ^!Y45VFy&AtBv&^w
+     
+
