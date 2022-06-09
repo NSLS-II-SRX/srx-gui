@@ -54,7 +54,7 @@ def scan_and_fly_base(detectors, xstart, xstop, xnum, ystart, ystop, ynum, dwell
         data = [_ + n_row * 0.1 for _ in data]
         if snake and (n_row % 2):  # Reverse rows with odd numbers
             data.reverse()
-        pts_aver = 2.3
+        pts_aver = 4.3
         for n in range(0, int(xnum / pts_aver) + 1):
             monitored_roi.put(np.array(data[: int(n * pts_aver)]))
             # monitored_roi.put([1, 2])
