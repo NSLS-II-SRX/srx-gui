@@ -302,5 +302,5 @@ class QtViewer(QTabWidget):
         self.addTab(self._organize_queue, "Organize Queue")
 
         # self._search_and_view = QtSearchAndView(SearchAndView(model.search, model.databroker_auto_plot_builder))
-        self._search_and_view = QtSearchAndView(SearchAndView(model.databroker_auto_plot_builder))
-        self.addTab(self._search_and_view, "Data Broker")
+        # self._search_and_view = QtSearchAndView(SearchAndView(model.databroker_auto_plot_builder))
+        # self.addTab(self._search_and_view, "Data Broker")

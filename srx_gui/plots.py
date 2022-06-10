@@ -2,63 +2,103 @@ import collections
 import functools
 import itertools
 
-from bluesky_widgets.models.utils import auto_label, call_or_eval, RunManager, run_is_live_and_not_completed
+from .settings import SETTINGS
+
+from bluesky_widgets.models.utils import auto_label, RunManager, run_is_live_and_not_completed
 from bluesky_widgets.utils.dict_view import DictView
-from bluesky_widgets.utils.event import EmitterGroup, Event
-from bluesky_widgets.utils.list import EventedList
 
 from bluesky_widgets.models.auto_plot_builders import AutoPlotter
 from bluesky_widgets.models.plot_builders import Lines, Images, RasteredImages
 from bluesky_widgets.models.plot_specs import Axes, Figure, Image, Line
 from bluesky_widgets.models.utils import run_is_live_and_not_completed
+from bluesky_widgets.utils.list import EventedList
+
 
 import numpy as np
-
-import pprint
-
-# plan_name
-# underlying_plan linescan motor type
-# underlying_plan xafs trans/fluorescence/ref
-
-monitored_line = "Br_ka1"
-monitored_stream_name = f"{monitored_line}_monitor"
+import time as ttime
 
 
-class RasteredImagesSRX:
+class LivePlotSRX(Lines):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._clear_data_cache()
+
+    def _clear_data_cache(self):
+        """
+        This function is part of the HACK intended to bypass standard document
+        handling during live plotting.
+        """
+        self.n_processed_documents = 0
+        self.data_cache_x = np.array([])
+        self.data_cache_y = np.array([])
+
+    def _add_lines(self, event):
+        "Add a line."
+        super()._add_lines(event)
+        self._clear_data_cache()
+
+    def _transform(self, run, x, y):
+        # return call_or_eval({"x": x, "y": y}, run, self.needs_streams, self.namespace)
+
+        # HACK: fixes the problem mentioned above for the particular type of data
+        docs = run._document_cache._ordered
+        n_docs = len(docs)
+        if n_docs > self.n_processed_documents:
+            descriptors = run._document_cache._descriptors
+            for name, doc in docs[self.n_processed_documents : n_docs]:
+                if name == "event_page":
+                    descriptor = descriptors[doc["descriptor"]]
+                    if descriptor["name"] in self.needs_streams:
+                        vals_x = doc["data"].get(x, [])
+                        vals_y = doc["data"].get(y, [])
+                        self.data_cache_x = np.append(self.data_cache_x, vals_x)
+                        self.data_cache_y = np.append(self.data_cache_y, vals_y)
+            self.n_processed_documents = n_docs
+        # END OF HACK
+
+        return {"x": self.data_cache_x, "y": self.data_cache_y}
+
+
+class LiveImageSRX(RasteredImages):
     """
-    Plot a rastered image from a Run.
+    ``RasteredImages`` customized for displaying live plots at SRX beamline.
+    The SRX metadata is very specifically structured, so all meaningful methods
+    had to be overridden.
 
     Parameters
     ----------
 
-    field : string
+    field: string
         Field name or expression
-    shape : Tuple[Integer]
+    shape: Tuple[Integer]
         The (row, col) shape of the raster
-    label_maker : Callable, optional
+    label_maker: Callable, optional
         Expected signature::
 
             f(run: BlueskyRun, y: String) -> label: String
 
-    needs_streams : List[String], optional
+    needs_streams: List[String], optional
         Streams referred to by field. Default is ``["primary"]``
-    namespace : Dict, optional
+    namespace: Dict, optional
         Inject additional tokens to be used in expressions for x and y
-    axes : Axes, optional
+    axes: Axes, optional
         If None, an axes and figure are created with default labels and titles
         derived from the ``x`` and ``y`` parameters.
-    clim : Tuple, optional
+    clim: Tuple, optional
         The color limits
-    cmap : String or Colormap, optional
+    cmap: String or Colormap, optional
         The color map to use
-    extent : scalars (left, right, bottom, top), optional
+    extent: scalars (left, right, bottom, top), optional
         Passed through to :meth:`matplotlib.axes.Axes.imshow`
-    x_positive : String, optional
+    x_positive: String, optional
         Defines the positive direction of the x axis, takes the values 'right'
         (default) or 'left'.
-    y_positive : String, optional
+    y_positive: String, optional
         Defines the positive direction of the y axis, takes the values 'up'
         (default) or 'down'.
+    use_custom_scaling: boolean
+        Indicates if custom scaling should be applied to the image. At this point
+        the scaling has not effect on the displayed images, so it should be left ``False``.
 
     Attributes
     ----------
@@ -96,9 +136,8 @@ class RasteredImagesSRX:
         extent=None,
         x_positive="right",
         y_positive="up",
+        use_custom_scaling=False,
     ):
-        super().__init__()
-
         if label_maker is None:
             # scan_id is always generated by RunEngine but not stricter required by
             # the schema, so we fail gracefully if it is missing.
@@ -143,80 +182,16 @@ class RasteredImagesSRX:
         self.add_run = self._run_manager.add_run
         self.discard_run = self._run_manager.discard_run
 
-    @property
-    def cmap(self):
-        return self._cmap
+        self._use_custom_scaling = use_custom_scaling
+        self._clear_data_cache()
 
-    @cmap.setter
-    def cmap(self, value):
-        self._cmap = value
-        for artist in self.axes.artists:
-            if isinstance(artist, Image):
-                artist.style.update({"cmap": value})
-
-    @property
-    def clim(self):
-        return self._clim
-
-    @clim.setter
-    def clim(self, value):
-        self._clim = value
-        for artist in self.axes.artists:
-            if isinstance(artist, Image):
-                artist.style.update({"clim": value})
-
-    @property
-    def extent(self):
-        return self._extent
-
-    @extent.setter
-    def extent(self, value):
-        self._extent = value
-        for artist in self.axes.artists:
-            if isinstance(artist, Image):
-                artist.style.update({"extent": value})
-
-    @property
-    def x_positive(self):
-        xmin, xmax = self.axes.x_limits
-        if xmin > xmax:
-            self._x_positive = "left"
-        else:
-            self._x_positive = "right"
-        return self._x_positive
-
-    @x_positive.setter
-    def x_positive(self, value):
-        if value not in ["right", "left"]:
-            raise ValueError('x_positive must be "right" or "left"')
-        self._x_positive = value
-        xmin, xmax = self.axes.x_limits
-        if (xmin > xmax and self._x_positive == "right") or (xmax > xmin and self._x_positive == "left"):
-            self.axes.x_limits = (xmax, xmin)
-        elif (xmax >= xmin and self._x_positive == "right") or (xmin >= xmax and self._x_positive == "left"):
-            self.axes.x_limits = (xmin, xmax)
-            self._x_positive = value
-
-    @property
-    def y_positive(self):
-        ymin, ymax = self.axes.y_limits
-        if ymin > ymax:
-            self._y_positive = "down"
-        else:
-            self._y_positive = "up"
-        return self._y_positive
-
-    @y_positive.setter
-    def y_positive(self, value):
-        if value not in ["up", "down"]:
-            raise ValueError('y_positive must be "up" or "down"')
-        self._y_positive = value
-        ymin, ymax = self.axes.y_limits
-        if (ymin > ymax and self._y_positive == "up") or (ymax > ymin and self._y_positive == "down"):
-            self.axes.y_limits = (ymax, ymin)
-        elif (ymax >= ymin and self._y_positive == "up") or (ymin >= ymax and self._y_positive == "down"):
-            self.axes.y_limits = (ymin, ymax)
-            self._y_positive = value
+    def _clear_data_cache(self):
+        """
+        This function is part of the HACK intended to bypass standard document
+        handling during live plotting.
+        """
+        self.n_processed_documents = 0
+        self.data_cache = np.array([])
 
     def _add_image(self, event):
         run = event.run
@@ -234,26 +209,44 @@ class RasteredImagesSRX:
         # In order to see entire pixels, we set lower limits to -0.5
         # and upper limits to columns-0.5 horizontally and rows-0.5 vertically
         # if limits aren't specifically set.
-        nx, ny = md["scan"]["shape"]
-        if self.axes.x_limits is None and self._x_positive == "right":
-            self.axes.x_limits = (-0.5, nx - 0.5)
-        elif self.axes.x_limits is None and self._x_positive == "left":
-            self.axes.x_limits = (nx - 0.5, -0.5)
-        if self.axes.y_limits is None and self._y_positive == "up":
-            self.axes.y_limits = (-0.5, ny - 0.5)
-        elif self.axes.y_limits is None and self._y_positive == "down":
-            self.axes.y_limits = (ny - 0.5, -0.5)
+        if self._use_custom_scaling:
+            nx, ny = md["scan"]["shape"]
+            if self._x_positive == "right":
+                self.axes.x_limits = (-0.5, nx - 0.5)
+            elif self._x_positive == "left":
+                self.axes.x_limits = (nx - 0.5, 0.5)
+            if self._y_positive == "up":
+                self.axes.y_limits = (-0.5, ny - 0.5)
+            elif self._y_positive == "down":
+                self.axes.y_limits = (ny - 0.5, 0.5)
+
+        self._clear_data_cache()
 
         # TODO Try to make the axes aspect equal unless the extent is highly non-square.
         ...
 
     def _transform(self, run, field):
-        result = call_or_eval({"data": field}, run, self.needs_streams, self.namespace)
-        data = result["data"]
-        data = np.array(data.load())
-        import time as ttime
+        # The following code slows down live plotting until the application freezes
+        #   (problems are observerd after 1000 data points)
+        # result = call_or_eval({"data": field}, run, self.needs_streams, self.namespace)
+        # data = result["data"]
+        # data = np.array(data.load())
 
-        print(f"New data available ... {ttime.time()} - {len(data)} points")
+        # HACK: fixes the problem mentioned above for the particular type of data
+        docs = run._document_cache._ordered
+        n_docs = len(docs)
+        if n_docs > self.n_processed_documents:
+            descriptors = run._document_cache._descriptors
+            for name, doc in docs[self.n_processed_documents : n_docs]:
+                if name == "event_page":
+                    descriptor = descriptors[doc["descriptor"]]
+                    if descriptor["name"] in self.needs_streams:
+                        vals = doc["data"].get(field, [])
+                        self.data_cache = np.append(self.data_cache, vals)
+            self.n_processed_documents = n_docs
+        # END OF HACK
+
+        data = self.data_cache
 
         md = run.metadata["start"]
         snake = md["scan"]["snake"]
@@ -270,52 +263,14 @@ class RasteredImagesSRX:
             ind = np.arange(1, ny, 2)
             image_data[ind] = np.fliplr(image_data[ind])
 
-        # # print(f"image_data={image_data}")
-
-        vmin, vmax = float(np.min(data)), float(np.max(data))
-        dv = (vmax - vmin) * 0.05
-        self.clim = (vmin + dv, vmax - dv)
-
-        # image_data = np.ones(shape=[ny, nx], dtype=np.float64)
-
-        print(f"New data ready ... {ttime.time()}")
-        # print(f"data={data}")
+        if data.size:
+            vmin, vmax = float(np.min(data)), float(np.max(data))
+            dv = (vmax - vmin) * 0.05
+            clim = (vmin + dv, vmax - dv)
+            if clim != self.clim:
+                self.clim = clim
 
         return {"array": image_data}
-
-    @property
-    def namespace(self):
-        return DictView(self._namespace or {})
-
-    @property
-    def field(self):
-        return self._field
-
-    @property
-    def shape(self):
-        return self._shape
-
-    # Expose some properties from the internal RunManger helper class.
-
-    @property
-    def runs(self):
-        return self._run_manager.runs
-
-    @property
-    def max_runs(self):
-        return self._run_manager.max_runs
-
-    @max_runs.setter
-    def max_runs(self, value):
-        self._run_manager.max_runs = value
-
-    @property
-    def needs_streams(self):
-        return self._run_manager._needs_streams
-
-    @property
-    def pinned(self):
-        return self._run_manager._pinned
 
 
 class AutoSRXPlot(AutoPlotter):
@@ -324,7 +279,29 @@ class AutoSRXPlot(AutoPlotter):
         self._models = {}
         self._figure_dict = {}
 
+        self._monitored_field = None
+        self._monitored_stream_name = None
+        self.set_monitored_field(field=SETTINGS.monitored_line)
+
         self.plot_builders.events.removed.connect(self._on_plot_builder_removed)
+
+    @property
+    def monitored_field(self):
+        return self._monitored_field
+
+    @property
+    def monitored_stream_name(self):
+        return self._monitored_stream_name
+
+    def set_monitored_field(self, field, *, stream_name=None):
+        """
+        Set monitored field and stream name. If stream name evaluates to boolean `False`,
+        then the stream name is automatically generated by adding the suffix ``"_monitor"``
+        to the ``field``.
+        """
+        self._monitored_field = field
+        default_name = f"{field}_monitor" if isinstance(field, str) else None
+        self._monitored_stream_name = stream_name or default_name
 
     def _on_plot_builder_removed(self, event):
         plot_builder = event.item
@@ -334,65 +311,28 @@ class AutoSRXPlot(AutoPlotter):
                     del self._models[key]
 
     def add_run(self, run, **kwargs):
-        print("Add run .......")  ##
+        # print("Add run .......")  ##
         super().add_run(run, **kwargs)
 
     def handle_new_stream(self, run, stream_name):
-        print(f"Kafka .......... stream_name={stream_name!r}")  ##
-        print(f"Run metadata: {run.metadata['start']}")
-        print(f"Run is live: {run_is_live_and_not_completed(run)}")
-        # print(f"type(run)={type(run)}")
-        # print(f"run = {pprint.pformat(list(run.documents(fill='no')))}")
-        # print(f"run = {dict(run)}")
-        # print(f"run = {run[monitored_stream_name].to_dask().load()}")
-
-        # if stream_name != "primary":
-        if stream_name != monitored_stream_name:
+        if stream_name != self._monitored_stream_name:
             return
 
         nx, ny = run._document_cache.start_doc["scan"]["shape"]
-
-        # Find out the plan type.
+        plot_type = "line" if ny == 1 else "image"
         plan_name = run.metadata["start"].get("plan_name").split(" ")
-        # if len(plan_name) > 1:
-        #     plan = plan_name[1]
-
-        # # Skip plan if it is not supported.
-        # if plan not in ["xafs", "linescan"]:
-        #     return
-
-        # # Gather the rest of the parameters.
-        # subtype = plan_name[-1]  # trans, ref, fluorescence, I0, It, Ir
-        # element = run.metadata["start"].get("XDI", {}).get("Element", {}).get("symbol", False)
-        # fluorescence = f"{element}1+{element}2+{element}3+{element}4" if element else None
-
-        # # Look up what goes on the x-axis.
-        # x_lookup = {"linescan": plan_name[2], "xafs": "dcm_energy"}
-        # x_axis = x_lookup[plan]
-
-        # # Look up what goes on the y-axis.
-        # y_lookup = {
-        #     "I0": ["I0"],
-        #     "It": ["It/I0"],
-        #     "Ir": ["Ir/It"],
-        #     "If": [f"({fluorescence})/I0"],
-        #     "trans": ["log(I0/It)", "log(It/Ir)", "I0", "It/I0", "Ir/It"],
-        #     "fluorescence": [f"({fluorescence})/I0", "log(I0/It)", "log(It/Ir)", "I0", "It/I0", "Ir/It"],
-        #     "ref": ["log(It/Ir)", "It/I0", "Ir/It"],
-        # }
-        # y_axes = y_lookup[subtype]
 
         x_axis = "index_count"
-        y_axes = [monitored_line]
+        y_axes = [self._monitored_field]
 
         for y_axis in y_axes:
             title = " ".join(plan_name)
             subtitle = y_axis
-            key = f"{title}: {subtitle}"
+            key = f"{title}: {subtitle} {plot_type}"
 
             append_figure = False
             if key in self._models:
-                print(f"Existing figure")
+                # print(f"Existing figure")
                 models = self._models[key]
                 figure = self._figure_dict.get(key, None)
                 if not figure or figure not in self.figures:
@@ -400,82 +340,60 @@ class AutoSRXPlot(AutoPlotter):
                     self._figure_dict[key] = figure
                     append_figure = True
             else:
-                print(f"New figure")
-                # model, figure = self.single_plot(f"{title}: {subtitle}", x_axis, y_axis)
-                # model, figure = self.single_image(f"{title}: {subtitle}", field=y_axis)
-                model, figure = self.single_rastered_image(f"{title}: {subtitle}", field=y_axis, shape=[nx, ny])
+                # print(f"New figure")
+                if plot_type == "line":
+                    model, figure = self.single_live_plot(
+                        title=f"{title}: {subtitle}", x=x_axis, y=y_axis, stream_name=self._monitored_stream_name
+                    )
+                else:
+                    model, figure = self.single_live_image(
+                        title=f"{title}: {subtitle}",
+                        field=y_axis,
+                        stream_name=self._monitored_stream_name,
+                        shape=[nx, ny],
+                    )
                 models = [model]
                 self._models[key] = [model]
                 self._figure_dict[key] = figure
                 append_figure = True
 
-            for model in models:
-                model.add_run(run)
-                self.plot_builders.append(model)
-                if append_figure:
-                    self.figures.append(figure)
+        for model in models:
+            model.add_run(run)
+            self.plot_builders.append(model)
+            if append_figure:
+                self.figures.append(figure)
+
+        figure_index = None
+        for n, fig in enumerate(self.figures):
+            if fig == figure:
+                figure_index = n
+                break
+        if figure_index is not None:
+            self.figures.active_index = figure_index
 
         return model, figure
 
-    def calc_x(self, run):  ##
-        print(f"'calc_x' called ...")
-        print(f"run={list(run.documents(fill='no'))}")
-        return [0, 0.5]
-
-    def calc_y(self, run):  ##
-        print(f"'calc_y' called ...")
-        return [[1], [2]]
-
-    def single_plot(self, title, x, y):
+    def single_live_plot(self, *, title, x, y, stream_name):
         axes1 = Axes()
         figure = Figure((axes1,), title=title)
-        # x, y = self.calc_x, self.calc_y  ##
-        model = Lines(
+        model = LivePlotSRX(
             x=x,
             ys=[y],
             max_runs=10,
             axes=axes1,
-            needs_streams=[monitored_stream_name],
+            needs_streams=[stream_name],
         )
         return model, figure
 
-    def calc_field(self, run):  ##
-        print(f"'calc_field' called ...")
-        # print(f"start={run._document_cache.start_doc}")
-        nx, ny = run._document_cache.start_doc["scan"]["shape"]
-        data = run[monitored_stream_name].to_dask().load()
-        # print(f"data[monitored_line]={data[monitored_line]}")
-        # print(f"data[index_count]={data['index_count']}")
-        # print(f"data[reset_count]={data['reset_count']}")
-        img_data = data[monitored_line]
-        n_total = nx * ny
-        if len(img_data) > n_total:
-            img_data = img_data[:n_total]
-        else:
-            img_data = np.pad(img_data, (0, n_total - len(img_data)), constant_values=np.nan)
-        img_data = img_data.reshape([ny, nx])
-        return img_data
-
-    def single_image(self, title, field):
+    def single_live_image(self, *, title, field, stream_name, shape):
         axes1 = Axes()
         figure = Figure((axes1,), title=title)
-        field = self.calc_field  ##
-        model = Images(
+        model = LiveImageSRX(
             field,
+            shape,
             max_runs=1,
             axes=axes1,
-            needs_streams=[monitored_stream_name],
-        )
-        # for artist in model.axes.artists:
-        #     if isinstance(artist, Image):
-        #         artist.style.update({"clim": (-50, 50)})
-        return model, figure
-
-    def single_rastered_image(self, title, field, shape):
-        axes1 = Axes()
-        figure = Figure((axes1,), title=title)
-        # field = self.calc_field  ##
-        model = RasteredImagesSRX(
-            field, max_runs=1, axes=axes1, needs_streams=[monitored_stream_name], shape=shape, y_positive="down"
+            needs_streams=[stream_name],
+            y_positive="down",
         )
         return model, figure
