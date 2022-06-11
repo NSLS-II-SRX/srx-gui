@@ -1,21 +1,14 @@
-import collections
 import functools
-import itertools
 
 from .settings import SETTINGS
 
-from bluesky_widgets.models.utils import auto_label, RunManager, run_is_live_and_not_completed
-from bluesky_widgets.utils.dict_view import DictView
+from bluesky_widgets.models.utils import RunManager
 
 from bluesky_widgets.models.auto_plot_builders import AutoPlotter
-from bluesky_widgets.models.plot_builders import Lines, Images, RasteredImages
-from bluesky_widgets.models.plot_specs import Axes, Figure, Image, Line
-from bluesky_widgets.models.utils import run_is_live_and_not_completed
-from bluesky_widgets.utils.list import EventedList
-
+from bluesky_widgets.models.plot_builders import Lines, RasteredImages
+from bluesky_widgets.models.plot_specs import Axes, Figure, Image
 
 import numpy as np
-import time as ttime
 
 
 class LivePlotSRX(Lines):
@@ -96,6 +89,8 @@ class LiveImageSRX(RasteredImages):
     y_positive: String, optional
         Defines the positive direction of the y axis, takes the values 'up'
         (default) or 'down'.
+    show_colorbar: boolean
+        Show colorbar for the image.
     use_custom_scaling: boolean
         Indicates if custom scaling should be applied to the image. At this point
         the scaling has not effect on the displayed images, so it should be left ``False``.
@@ -136,6 +131,7 @@ class LiveImageSRX(RasteredImages):
         extent=None,
         x_positive="right",
         y_positive="up",
+        show_colorbar=False,
         use_custom_scaling=False,
     ):
         if label_maker is None:
@@ -171,11 +167,13 @@ class LiveImageSRX(RasteredImages):
                 self.axes.events.figure.disconnect(set_figure)
 
             self.axes.events.figure.connect(set_figure)
+
         self._clim = clim
         self._cmap = cmap
         self._extent = extent
         self._x_positive = x_positive
         self._y_positive = y_positive
+        self._show_colorbar = bool(show_colorbar)
 
         self._run_manager = RunManager(max_runs, needs_streams)
         self._run_manager.events.run_ready.connect(self._add_image)
@@ -196,7 +194,12 @@ class LiveImageSRX(RasteredImages):
     def _add_image(self, event):
         run = event.run
         func = functools.partial(self._transform, field=self.field)
-        style = {"cmap": self._cmap, "clim": self._clim, "extent": self._extent}
+        style = {
+            "cmap": self._cmap,
+            "clim": self._clim,
+            "extent": self._extent,
+            "show_colorbar": self._show_colorbar,
+        }
         image = Image.from_run(func, run, label=self.field, style=style)
         self._run_manager.track_artist(image, [run])
         md = run.metadata["start"]
@@ -395,5 +398,6 @@ class AutoSRXPlot(AutoPlotter):
             axes=axes1,
             needs_streams=[stream_name],
             y_positive="down",
+            show_colorbar=True,
         )
         return model, figure

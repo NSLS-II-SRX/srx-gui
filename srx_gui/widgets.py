@@ -30,9 +30,8 @@ from qtpy.QtWidgets import (
 )
 from qtpy.QtCore import Qt
 
-from .models import RunAndView, SearchAndView
-
-# from .widget_xafs import PlanEditorXafs
+from .models import RunAndView
+# from .models import SearchAndView
 
 
 class QtSearchWithButton(QWidget):
@@ -178,7 +177,6 @@ class QtRunExperiment(QWidget):
         vbox2 = QVBoxLayout()
         vbox2.addWidget(QtFigures(model.live_auto_plot_builder.figures))
         # vbox2.addWidget(QtRePlanEditor(model), stretch=1)
-        # vbox2.addWidget(PlanEditorXafs(model), stretch=1)
         hbox.addLayout(vbox2)
 
         vbox.addLayout(hbox)
@@ -201,7 +199,6 @@ class QtOrganizeQueueLeft(QSplitter):
         # self.addWidget(self._frame_top)
         self.addWidget(self._frame_bottom)
 
-        # self._plan_editor = PlanEditorXafs(model)
         self._plan_history = QtRePlanQueue(model)
 
         # vbox = QVBoxLayout()
