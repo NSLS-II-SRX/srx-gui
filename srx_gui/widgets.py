@@ -286,6 +286,15 @@ class QtOrganizeQueue(QWidget):
         self.setLayout(hbox)
 
 
+class QtLivePlots(QWidget):
+    def __init__(self, model, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.model = model
+        vbox = QVBoxLayout()
+        vbox.addWidget(QtFigures(model.live_auto_plot_builder.figures))
+        self.setLayout(vbox)
+
+
 class QtViewer(QTabWidget):
     def __init__(self, model, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -298,6 +307,9 @@ class QtViewer(QTabWidget):
 
         self._organize_queue = QtOrganizeQueue(model.run_engine)
         self.addTab(self._organize_queue, "Organize Queue")
+
+        self._live_plots = QtLivePlots(RunAndView(model.run_engine, model.live_auto_plot_builder))
+        self.addTab(self._live_plots, "Live Plots")
 
         # self._search_and_view = QtSearchAndView(SearchAndView(model.search, model.databroker_auto_plot_builder))
         # self._search_and_view = QtSearchAndView(SearchAndView(model.databroker_auto_plot_builder))
