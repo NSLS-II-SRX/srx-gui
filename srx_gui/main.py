@@ -20,12 +20,9 @@ def main(argv=None):
         "--kafka-topics", help="Kafka servers, comma-separated string, e.g. bmm.bluesky.runengine.documents"
     )
     parser.add_argument("--catalog", help="Databroker catalog")
-    parser.add_argument("--monitored-line", required=True, help="Monitored emission line, e.g. Br_ka1")
     args = parser.parse_args(argv)
 
     with gui_qt("SRX GUI"):
-        if args.monitored_line:
-            SETTINGS.monitored_line = args.monitored_line
         if args.catalog:
             import databroker
 

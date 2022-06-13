@@ -42,7 +42,6 @@ class Settings:
     columns = columns
     catalog = None
     subscribe_to = []
-    monitored_line = None
 
 
 SETTINGS = Settings()

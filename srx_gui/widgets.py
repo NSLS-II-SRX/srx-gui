@@ -31,6 +31,7 @@ from qtpy.QtWidgets import (
 from qtpy.QtCore import Qt
 
 from .models import RunAndView
+
 # from .models import SearchAndView
 
 
