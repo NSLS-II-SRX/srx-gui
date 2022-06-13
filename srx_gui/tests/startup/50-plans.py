@@ -1,9 +1,11 @@
 import bluesky.plan_stubs as bps
 from bluesky.plans import count
-from bluesky.preprocessors import monitor_during_decorator, run_decorator
+from bluesky.preprocessors import monitor_during_decorator, run_decorator, subs_decorator
 from ophyd.sim import det1, det2, motor1, motor2, SynSignal
 from ophyd import Signal
 import numpy as np
+
+sx = Signal(name="sx")
 
 
 class YPos(Signal):
@@ -28,7 +30,9 @@ roi_pv = monitored_roi
 roi_pv.put([])
 
 
-def scan_and_fly_base(detectors, xstart, xstop, xnum, ystart, ystop, ynum, dwell, *, md=None, snake=False):
+def scan_and_fly_base(
+    detectors, xstart, xstop, xnum, ystart, ystop, ynum, dwell, *, md=None, snake=False, plot=False
+):
     """
     Starting the plan: RE(scan_and_fly_base([det1], 0, 1, 15, 0, 2, 5, 0.1, snake=False))
     """
@@ -39,6 +43,8 @@ def scan_and_fly_base(detectors, xstart, xstop, xnum, ystart, ystop, ynum, dwell
     # Check for negative number of points
     if xnum < 1 or ynum < 1:
         raise ValueError("Number of points must be positive!")
+
+    xmotor = sx
 
     # Scan metadata
     md.setdefault("scan", {})
@@ -62,6 +68,29 @@ def scan_and_fly_base(detectors, xstart, xstop, xnum, ystart, ystop, ynum, dwell
         monitored_roi.put(np.array(data))
         # monitored_roi.put([1, 2])
 
+    if plot:
+        if ynum == 1:
+            livepopup = [
+                # SRX1DFlyerPlot(
+                SRX1DTSFlyerPlot(
+                    roi_pv.name, xstart=xstart, xstep=(xstop - xstart) / (xnum - 1), xlabel=xmotor.name
+                )
+            ]
+        else:
+            livepopup = [
+                # LiveGrid(
+                TSLiveGrid(
+                    (ynum, xnum),
+                    roi_pv.name,
+                    extent=(xstart, xstop, ystart, ystop),
+                    x_positive="right",
+                    y_positive="down",
+                )
+            ]
+    else:
+        livepopup = []
+
+    @subs_decorator(livepopup)
     # @monitor_during_decorator([roi_pv])
     @ts_monitor_during_decorator([roi_pv])
     @run_decorator(md=md)

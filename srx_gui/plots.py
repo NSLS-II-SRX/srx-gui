@@ -34,6 +34,12 @@ class LivePlotSRX(Lines):
         # HACK: fixes the problem mentioned above for the particular type of data
         docs = run._document_cache._ordered
         n_docs = len(docs)
+
+        md = run.metadata["start"]
+        xstart, xstop = md["scan"]["scan_input"][0:2]
+        nx, _ = md["scan"]["shape"]
+        xstep = (xstop - xstart) / nx
+
         if n_docs > self.n_processed_documents:
             descriptors = run._document_cache._descriptors
             for name, doc in docs[self.n_processed_documents : n_docs]:
@@ -47,7 +53,8 @@ class LivePlotSRX(Lines):
             self.n_processed_documents = n_docs
         # END OF HACK
 
-        return {"x": self.data_cache_x, "y": self.data_cache_y}
+        data_x = self.data_cache_x * xstep + xstart  # Computed coordinates
+        return {"x": data_x, "y": self.data_cache_y}
 
 
 class LiveImageSRX(RasteredImages):
@@ -315,11 +322,15 @@ class AutoSRXPlot(AutoPlotter):
         super().add_run(run, **kwargs)
 
     def handle_new_stream(self, run, stream_name):
-        if stream_name.endswith("_monitor"):
-            field = "_".join(stream_name.split("_")[:-1])
-            self._set_monitored_field(field, stream_name=stream_name)
+        if not stream_name.endswith("_monitor"):
+            return
+
+        field = "_".join(stream_name.split("_")[:-1])
+        self._set_monitored_field(field, stream_name=stream_name)
 
         nx, ny = run._document_cache.start_doc["scan"]["shape"]
+        xstart, xstop = run._document_cache.start_doc["scan"]["scan_input"][0:2]
+        ystart, ystop = run._document_cache.start_doc["scan"]["scan_input"][2:4]
         plot_type = "line" if ny == 1 else "image"
         plan_name = run.metadata["start"].get("plan_name").split(" ")
 
@@ -352,6 +363,7 @@ class AutoSRXPlot(AutoPlotter):
                         field=y_axis,
                         stream_name=self._monitored_stream_name,
                         shape=[nx, ny],
+                        extent=[xstart, xstop, ystart, ystop],
                     )
                 models = [model]
                 self._models[key] = [model]
@@ -386,12 +398,13 @@ class AutoSRXPlot(AutoPlotter):
         )
         return model, figure
 
-    def single_live_image(self, *, title, field, stream_name, shape):
+    def single_live_image(self, *, title, field, stream_name, shape, extent):
         axes1 = Axes()
         figure = Figure((axes1,), title=title)
         model = LiveImageSRX(
             field,
             shape,
+            # extent=extent,  # TODO: extent currently has no effect on plots
             max_runs=1,
             axes=axes1,
             needs_streams=[stream_name],
