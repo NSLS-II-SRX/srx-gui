@@ -1,4 +1,6 @@
 import os
+import copy
+import pprint
 
 from bluesky_widgets.models.run_engine_client import RunEngineClient
 from bluesky_widgets.qt import Window
@@ -58,8 +60,18 @@ class Viewer(ViewerModel):
 
                 bootstrap_servers = source["servers"]
                 topics = source["topics"]
+                consumer_config = source["config"]
+                consumer_config.update({"auto.commit.interval.ms": 100, "auto.offset.reset": "latest"})
 
-                consumer_config = {"auto.commit.interval.ms": 100, "auto.offset.reset": "latest"}
+                # We do not want to print passwords
+                consumer_config_copy = copy.deepcopy(consumer_config)
+                for k in consumer_config_copy.keys():
+                    if "password" in k:
+                        consumer_config_copy[k] = "< ... >"
+                print("Subscribing to Kafka ...")
+                print(f"Bootstrap servers: {bootstrap_servers}")
+                print(f"Topics: {topics}")
+                print(f"Consumer configuration: {pprint.pformat(consumer_config_copy)}")
 
                 self.dispatcher = RemoteDispatcher(
                     topics=topics,
