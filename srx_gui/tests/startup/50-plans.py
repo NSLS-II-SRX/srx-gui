@@ -62,11 +62,11 @@ def scan_and_fly_base(
             data.reverse()
         pts_aver = 9.3
         for n in range(0, int(xnum / pts_aver) + 1):
-            monitored_roi.put(np.array(data[: int(n * pts_aver)]))
-            # monitored_roi.put([1, 2])
+            v = np.array(data[: int(n * pts_aver)])
+            monitored_roi.put(v)
+            # yield from bps.abs_set(monitored_roi, v, wait=True)
             yield from bps.sleep(dwell * pts_aver)
         monitored_roi.put(np.array(data))
-        # monitored_roi.put([1, 2])
 
     if plot:
         if ynum == 1:
@@ -100,7 +100,8 @@ def scan_and_fly_base(
 
             # Create the 'primary' stream with some data
             yield from bps.create()
-            y_pos.put(n_row)
+            # y_pos.put(n_row)
+            yield from bps.abs_set(y_pos, n_row, wait=True)
             yield from bps.read(y_pos)
 
             yield from fly_each_step(xnum=xnum, n_row=n_row, dwell=dwell)
