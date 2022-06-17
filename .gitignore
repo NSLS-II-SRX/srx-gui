@@ -80,3 +80,5 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
+
+existing_plans_and_devices.yaml
