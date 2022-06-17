@@ -294,6 +294,7 @@ class AutoSRXPlot(AutoPlotter):
 
         self._plot_number = 0
         self._plot_number_displayed_max = 3
+        self._figure_key_plot_numbers = {}
 
     @property
     def monitored_field(self):
@@ -334,6 +335,7 @@ class AutoSRXPlot(AutoPlotter):
         nx, ny = run._document_cache.start_doc["scan"]["shape"]
         xstart, xstop = run._document_cache.start_doc["scan"]["scan_input"][0:2]
         ystart, ystop = run._document_cache.start_doc["scan"]["scan_input"][2:4]
+        scan_id = run._document_cache.start_doc["scan_id"]
         plot_type = "line" if ny == 1 else "image"
         plan_name = run.metadata["start"].get("plan_name").split(" ")
 
@@ -344,10 +346,22 @@ class AutoSRXPlot(AutoPlotter):
             title = " ".join(plan_name)
             subtitle = y_axis
             if plot_type == "image":
-                key = f"plot2d-{self._plot_number % self._plot_number_displayed_max}"
+                key, pn = "", self._plot_number
+                for n in range(self._plot_number_displayed_max):
+                    key_tmp = f"plot2d-{n}"
+                    if key_tmp not in self._models:
+                        key = key_tmp
+                        break
+                    else:
+                        if self._figure_key_plot_numbers[key_tmp] < pn:
+                            pn = self._figure_key_plot_numbers[key_tmp]
+                            key = key_tmp
+                key_plot_number = self._plot_number
                 self._plot_number += 1
             else:
-                key = f"{title}: {subtitle} {plot_type}"
+                key = "plot1d"
+                key_plot_number = 0
+                # key = f"{title}: {subtitle} {plot_type}"  # Original title
 
             append_figure = False
             if key in self._models:
@@ -376,6 +390,13 @@ class AutoSRXPlot(AutoPlotter):
                 self._models[key] = [model]
                 self._figure_dict[key] = figure
                 append_figure = True
+
+        self._figure_key_plot_numbers[key] = key_plot_number
+
+        if plot_type == "image":
+            figure.short_title = f"2D: {scan_id}"
+        elif plot_type == "line":
+            figure.short_title = f"1D: {scan_id}"
 
         for model in models:
             model.add_run(run)
