@@ -292,6 +292,9 @@ class AutoSRXPlot(AutoPlotter):
 
         self.plot_builders.events.removed.connect(self._on_plot_builder_removed)
 
+        self._plot_number = 0
+        self._plot_number_displayed_max = 3
+
     @property
     def monitored_field(self):
         return self._monitored_field
@@ -340,7 +343,11 @@ class AutoSRXPlot(AutoPlotter):
         for y_axis in y_axes:
             title = " ".join(plan_name)
             subtitle = y_axis
-            key = f"{title}: {subtitle} {plot_type}"
+            if plot_type == "image":
+                key = f"plot2d-{self._plot_number % self._plot_number_displayed_max}"
+                self._plot_number += 1
+            else:
+                key = f"{title}: {subtitle} {plot_type}"
 
             append_figure = False
             if key in self._models:
