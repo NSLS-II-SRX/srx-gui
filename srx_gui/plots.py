@@ -1,0 +1,414 @@
+import functools
+
+from bluesky_widgets.models.utils import RunManager
+
+from bluesky_widgets.models.auto_plot_builders import AutoPlotter
+from bluesky_widgets.models.plot_builders import Lines, RasteredImages
+from bluesky_widgets.models.plot_specs import Axes, Figure, Image
+
+import numpy as np
+
+
+class LivePlotSRX(Lines):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._clear_data_cache()
+
+    def _clear_data_cache(self):
+        """
+        This function is part of the HACK intended to bypass standard document
+        handling during live plotting.
+        """
+        self.n_processed_documents = 0
+        self.data_cache_x = np.array([])
+        self.data_cache_y = np.array([])
+
+    def _add_lines(self, event):
+        "Add a line."
+        super()._add_lines(event)
+        self._clear_data_cache()
+
+    def _transform(self, run, x, y):
+        # return call_or_eval({"x": x, "y": y}, run, self.needs_streams, self.namespace)
+
+        # HACK: fixes the problem mentioned above for the particular type of data
+        docs = run._document_cache._ordered
+        n_docs = len(docs)
+
+        md = run.metadata["start"]
+        xstart, xstop = md["scan"]["scan_input"][0:2]
+        nx, _ = md["scan"]["shape"]
+        xstep = (xstop - xstart) / nx
+
+        if n_docs > self.n_processed_documents:
+            descriptors = run._document_cache._descriptors
+            for name, doc in docs[self.n_processed_documents : n_docs]:
+                if name == "event_page":
+                    descriptor = descriptors[doc["descriptor"]]
+                    if descriptor["name"] in self.needs_streams:
+                        vals_x = doc["data"].get(x, [])
+                        vals_y = doc["data"].get(y, [])
+                        self.data_cache_x = np.append(self.data_cache_x, vals_x)
+                        self.data_cache_y = np.append(self.data_cache_y, vals_y)
+            self.n_processed_documents = n_docs
+        # END OF HACK
+
+        data_x = self.data_cache_x * xstep + xstart  # Computed coordinates
+        return {"x": data_x, "y": self.data_cache_y}
+
+
+class LiveImageSRX(RasteredImages):
+    """
+    ``RasteredImages`` customized for displaying live plots at SRX beamline.
+    The SRX metadata is very specifically structured, so all meaningful methods
+    had to be overridden.
+
+    Parameters
+    ----------
+
+    field: string
+        Field name or expression
+    shape: Tuple[Integer]
+        The (row, col) shape of the raster
+    label_maker: Callable, optional
+        Expected signature::
+
+            f(run: BlueskyRun, y: String) -> label: String
+
+    needs_streams: List[String], optional
+        Streams referred to by field. Default is ``["primary"]``
+    namespace: Dict, optional
+        Inject additional tokens to be used in expressions for x and y
+    axes: Axes, optional
+        If None, an axes and figure are created with default labels and titles
+        derived from the ``x`` and ``y`` parameters.
+    clim: Tuple, optional
+        The color limits
+    cmap: String or Colormap, optional
+        The color map to use
+    extent: scalars (left, right, bottom, top), optional
+        Passed through to :meth:`matplotlib.axes.Axes.imshow`
+    x_positive: String, optional
+        Defines the positive direction of the x axis, takes the values 'right'
+        (default) or 'left'.
+    y_positive: String, optional
+        Defines the positive direction of the y axis, takes the values 'up'
+        (default) or 'down'.
+    show_colorbar: boolean
+        Show colorbar for the image.
+    use_custom_scaling: boolean
+        Indicates if custom scaling should be applied to the image. At this point
+        the scaling has not effect on the displayed images, so it should be left ``False``.
+
+    Attributes
+    ----------
+    run : BlueskyRun
+        The currently-viewed Run
+    figure : Figure
+    axes : Axes
+    field : String
+        Read-only access to field or expression
+    needs_streams : List[String], optional
+        Read-only access to streams referred to by field.
+    namespace : Dict, optional
+        Read-only access to user-provided namespace
+
+    Examples
+    --------
+    >>> model = RasteredImages("intensity", shape=(100, 200))
+    >>> from bluesky_widgets.jupyter.figures import JupyterFigure
+    >>> view = JupyterFigure(model.figure)
+    >>> model.add_run(run)
+    """
+
+    def __init__(
+        self,
+        field,
+        shape,
+        *,
+        max_runs=1,
+        label_maker=None,
+        needs_streams=("primary",),
+        namespace=None,
+        axes=None,
+        clim=None,
+        cmap="viridis",
+        extent=None,
+        x_positive="right",
+        y_positive="up",
+        show_colorbar=False,
+        use_custom_scaling=False,
+    ):
+        if label_maker is None:
+            # scan_id is always generated by RunEngine but not stricter required by
+            # the schema, so we fail gracefully if it is missing.
+
+            def label_maker(run, field):
+                md = run.metadata["start"]
+                return f"Scan ID {md.get('scan_id', '?')}   UID {md['uid'][:8]}   {field}"
+
+        self._label_maker = label_maker
+
+        # Stash these and expose them as read-only properties.
+        self._field = field
+        self._shape = shape
+        self._namespace = namespace
+
+        self._run = None
+
+        if axes is None:
+            axes = Axes()
+            figure = Figure((axes,), title="")
+        else:
+            figure = axes.figure
+        self.axes = axes
+        self.figure = figure
+        # If the Axes' figure is not yet set, listen for it to be set.
+        if figure is None:
+
+            def set_figure(event):
+                self.figure = event.value
+                # This occurs at most once, so we can now stop listening.
+                self.axes.events.figure.disconnect(set_figure)
+
+            self.axes.events.figure.connect(set_figure)
+
+        self._clim = clim
+        self._cmap = cmap
+        self._extent = extent
+        self._x_positive = x_positive
+        self._y_positive = y_positive
+        self._show_colorbar = bool(show_colorbar)
+
+        self._run_manager = RunManager(max_runs, needs_streams)
+        self._run_manager.events.run_ready.connect(self._add_image)
+        self.add_run = self._run_manager.add_run
+        self.discard_run = self._run_manager.discard_run
+
+        self._use_custom_scaling = use_custom_scaling
+        self._clear_data_cache()
+
+    def _clear_data_cache(self):
+        """
+        This function is part of the HACK intended to bypass standard document
+        handling during live plotting.
+        """
+        self.n_processed_documents = 0
+        self.data_cache = np.array([])
+
+    def _add_image(self, event):
+        run = event.run
+        func = functools.partial(self._transform, field=self.field)
+        style = {
+            "cmap": self._cmap,
+            "clim": self._clim,
+            "extent": self._extent,
+            "show_colorbar": self._show_colorbar,
+        }
+        image = Image.from_run(func, run, label=self.field, style=style)
+        self._run_manager.track_artist(image, [run])
+        md = run.metadata["start"]
+        self.axes.artists.append(image)
+        self.axes.title = self._label_maker(run, self.field)
+        self.axes.x_label = "X"  # md["motors"][1]
+        self.axes.y_label = "Y"  # md["motors"][0]
+        # By default, pixels center on integer coordinates ranging from 0 to
+        # columns-1 horizontally and 0 to rows-1 vertically.
+        # In order to see entire pixels, we set lower limits to -0.5
+        # and upper limits to columns-0.5 horizontally and rows-0.5 vertically
+        # if limits aren't specifically set.
+        if self._use_custom_scaling:
+            nx, ny = md["scan"]["shape"]
+            if self._x_positive == "right":
+                self.axes.x_limits = (-0.5, nx - 0.5)
+            elif self._x_positive == "left":
+                self.axes.x_limits = (nx - 0.5, 0.5)
+            if self._y_positive == "up":
+                self.axes.y_limits = (-0.5, ny - 0.5)
+            elif self._y_positive == "down":
+                self.axes.y_limits = (ny - 0.5, 0.5)
+
+        self._clear_data_cache()
+
+        # TODO Try to make the axes aspect equal unless the extent is highly non-square.
+        ...
+
+    def _transform(self, run, field):
+        # The following code slows down live plotting until the application freezes
+        #   (problems are observerd after 1000 data points)
+        # result = call_or_eval({"data": field}, run, self.needs_streams, self.namespace)
+        # data = result["data"]
+        # data = np.array(data.load())
+
+        # HACK: fixes the problem mentioned above for the particular type of data
+        docs = run._document_cache._ordered
+        n_docs = len(docs)
+        if n_docs > self.n_processed_documents:
+            descriptors = run._document_cache._descriptors
+            for name, doc in docs[self.n_processed_documents : n_docs]:
+                if name == "event_page":
+                    descriptor = descriptors[doc["descriptor"]]
+                    if descriptor["name"] in self.needs_streams:
+                        vals = doc["data"].get(field, [])
+                        self.data_cache = np.append(self.data_cache, vals)
+            self.n_processed_documents = n_docs
+        # END OF HACK
+
+        data = self.data_cache
+
+        md = run.metadata["start"]
+        snake = md["scan"]["snake"]
+        nx, ny = md["scan"]["shape"]
+
+        n_total = nx * ny
+        if len(data) > n_total:
+            image_data = data[:n_total]
+        else:
+            image_data = np.pad(data, (0, n_total - len(data)), constant_values=np.nan)
+        image_data = image_data.reshape([ny, nx])
+
+        if snake:
+            ind = np.arange(1, ny, 2)
+            image_data[ind] = np.fliplr(image_data[ind])
+
+        if data.size:
+            vmin, vmax = float(np.min(data)), float(np.max(data))
+            dv = (vmax - vmin) * 0.05
+            clim = (vmin + dv, vmax - dv)
+            if clim != self.clim:
+                self.clim = clim
+
+        return {"array": image_data}
+
+
+class AutoSRXPlot(AutoPlotter):
+    def __init__(self):
+        super().__init__()
+        self._models = {}
+        self._figure_dict = {}
+
+        self._monitored_field = None
+        self._monitored_stream_name = None
+
+        self.plot_builders.events.removed.connect(self._on_plot_builder_removed)
+
+    @property
+    def monitored_field(self):
+        return self._monitored_field
+
+    @property
+    def monitored_stream_name(self):
+        return self._monitored_stream_name
+
+    def _set_monitored_field(self, field, *, stream_name=None):
+        """
+        Set monitored field and stream name. If stream name evaluates to boolean `False`,
+        then the stream name is automatically generated by adding the suffix ``"_monitor"``
+        to the ``field``.
+        """
+        self._monitored_field = field
+        default_name = f"{field}_monitor" if isinstance(field, str) else None
+        self._monitored_stream_name = stream_name or default_name
+
+    def _on_plot_builder_removed(self, event):
+        plot_builder = event.item
+        for key in list(self._models):
+            for line in self._models[key]:
+                if line == plot_builder:
+                    del self._models[key]
+
+    def add_run(self, run, **kwargs):
+        # print("Add run .......")  ##
+        super().add_run(run, **kwargs)
+
+    def handle_new_stream(self, run, stream_name):
+        if not stream_name.endswith("_monitor"):
+            return
+
+        field = "_".join(stream_name.split("_")[:-1])
+        self._set_monitored_field(field, stream_name=stream_name)
+
+        nx, ny = run._document_cache.start_doc["scan"]["shape"]
+        xstart, xstop = run._document_cache.start_doc["scan"]["scan_input"][0:2]
+        ystart, ystop = run._document_cache.start_doc["scan"]["scan_input"][2:4]
+        plot_type = "line" if ny == 1 else "image"
+        plan_name = run.metadata["start"].get("plan_name").split(" ")
+
+        x_axis = "index_count"
+        y_axes = [self._monitored_field]
+
+        for y_axis in y_axes:
+            title = " ".join(plan_name)
+            subtitle = y_axis
+            key = f"{title}: {subtitle} {plot_type}"
+
+            append_figure = False
+            if key in self._models:
+                # print(f"Existing figure")
+                models = self._models[key]
+                figure = self._figure_dict.get(key, None)
+                if not figure or figure not in self.figures:
+                    figure = Figure((Axes(),), title=key)
+                    self._figure_dict[key] = figure
+                    append_figure = True
+            else:
+                # print(f"New figure")
+                if plot_type == "line":
+                    model, figure = self.single_live_plot(
+                        title=f"{title}: {subtitle}", x=x_axis, y=y_axis, stream_name=self._monitored_stream_name
+                    )
+                else:
+                    model, figure = self.single_live_image(
+                        title=f"{title}: {subtitle}",
+                        field=y_axis,
+                        stream_name=self._monitored_stream_name,
+                        shape=[nx, ny],
+                        extent=[xstart, xstop, ystart, ystop],
+                    )
+                models = [model]
+                self._models[key] = [model]
+                self._figure_dict[key] = figure
+                append_figure = True
+
+        for model in models:
+            model.add_run(run)
+            self.plot_builders.append(model)
+            if append_figure:
+                self.figures.append(figure)
+
+        figure_index = None
+        for n, fig in enumerate(self.figures):
+            if fig == figure:
+                figure_index = n
+                break
+        if figure_index is not None:
+            self.figures.active_index = figure_index
+
+        return model, figure
+
+    def single_live_plot(self, *, title, x, y, stream_name):
+        axes1 = Axes()
+        figure = Figure((axes1,), title=title)
+        model = LivePlotSRX(
+            x=x,
+            ys=[y],
+            max_runs=10,
+            axes=axes1,
+            needs_streams=[stream_name],
+        )
+        return model, figure
+
+    def single_live_image(self, *, title, field, stream_name, shape, extent):
+        axes1 = Axes()
+        figure = Figure((axes1,), title=title)
+        model = LiveImageSRX(
+            field,
+            shape,
+            # extent=extent,  # TODO: extent currently has no effect on plots
+            max_runs=1,
+            axes=axes1,
+            needs_streams=[stream_name],
+            y_positive="down",
+            show_colorbar=True,
+        )
+        return model, figure
