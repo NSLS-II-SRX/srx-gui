@@ -1,9 +1,34 @@
 import bluesky.plan_stubs as bps
+from bluesky.plan_stubs import mv
 from bluesky.plans import count
 from bluesky.preprocessors import monitor_during_decorator, run_decorator, subs_decorator
+import ophyd
+from ophyd import Signal, Device, Component as Cpt
 from ophyd.sim import det1, det2, motor1, motor2, SynSignal
-from ophyd import Signal
 import numpy as np
+
+
+class SRXNanoStage(Device):
+    x = Cpt(ophyd.sim.SynAxis, name="x", labels={"motors"})
+    y = Cpt(ophyd.sim.SynAxis, name="y", labels={"motors"})
+    z = Cpt(ophyd.sim.SynAxis, name="z", labels={"motors"})
+    xx = Cpt(ophyd.sim.SynAxis, name="xx", labels={"motors"})
+    yy = Cpt(ophyd.sim.SynAxis, name="yy", labels={"motors"})
+    zz = Cpt(ophyd.sim.SynAxis, name="zy", labels={"motors"})
+    th = Cpt(ophyd.sim.SynAxis, name="th", labels={"motors"})
+
+    def set(self, x, y, z, xx, yy, zz, th):
+        """Makes the device Movable"""
+        self.x.set(x)
+        self.y.set(y)
+        self.z.set(z)
+        self.xx.set(xx)
+        self.yy.set(yy)
+        self.zz.set(zz)
+        self.th.set(th)
+
+
+nano_stage = SRXNanoStage(name="nano_stage")
 
 sx = Signal(name="sx")
 
@@ -31,7 +56,19 @@ roi_pv.put([])
 
 
 def scan_and_fly_base(
-    detectors, xstart, xstop, xnum, ystart, ystop, ynum, dwell, *, md=None, snake=False, plot=False
+    detectors,
+    xstart,
+    xstop,
+    xnum,
+    ystart,
+    ystop,
+    ynum,
+    dwell,
+    *,
+    md=None,
+    snake=False,
+    plot=False,
+    shutter=True,
 ):
     """
     Starting the plan: RE(scan_and_fly_base([det1], 0, 1, 15, 0, 2, 5, 0.1, snake=False))
@@ -109,3 +146,30 @@ def scan_and_fly_base(
             yield from bps.save()
 
     yield from plan(xnum=xnum, ynum=ynum, dwell=dwell)
+
+
+def nano_scan_and_fly(*args, extra_dets=None, center=True, **kwargs):
+    """
+    Emulation of ``nano_scan_and_fly`` plan.
+    """
+    dets = [det1]
+    if extra_dets:
+        dets.extend(extra_dets)
+    yield from scan_and_fly_base(dets, *args, **kwargs)
+
+
+def check_shutters(check, status):
+    """
+    Emulation of ``check_shutters`` plan.
+    """
+    if not isinstance(check, bool):
+        raise TypeError("Incorrect type of 'check' parameter: {type(check)}")
+
+    if status == "Open":
+        print("Opening D-hutch shutter...")
+        yield from bps.sleep(1)
+    elif status == "Close":
+        print("Closing D-hutch shutter...")
+        yield from bps.sleep(1)
+    else:
+        raise ValueError(f"Incorrect value of 'status': {status}")

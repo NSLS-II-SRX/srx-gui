@@ -1,6 +1,7 @@
 import os
 import copy
 import pprint
+import uuid
 
 from bluesky_widgets.models.run_engine_client import RunEngineClient
 from bluesky_widgets.qt import Window
@@ -76,7 +77,7 @@ class Viewer(ViewerModel):
                 self.dispatcher = RemoteDispatcher(
                     topics=topics,
                     bootstrap_servers=bootstrap_servers,
-                    group_id="widgets_test",
+                    group_id="widgets_test_" + str(uuid.uuid4()).split("-")[-1],  # Random group name
                     consumer_config=consumer_config,
                 )
 
