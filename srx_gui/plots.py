@@ -329,6 +329,10 @@ class AutoSRXPlot(AutoPlotter):
         if not stream_name.endswith("_monitor"):
             return
 
+        # Return if the scan type is not supported
+        if run._document_cache.start_doc["scan"]["type"] != "XRF_FLY":
+            return
+
         field = "_".join(stream_name.split("_")[:-1])
         self._set_monitored_field(field, stream_name=stream_name)
 
