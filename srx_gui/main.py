@@ -2,10 +2,61 @@ import argparse
 import os
 
 from bluesky_widgets.qt import gui_qt
-from nslsii import _read_bluesky_kafka_config_file
+from pathlib import Path
 
 from .viewer import Viewer
 from .settings import SETTINGS
+
+
+def _read_bluesky_kafka_config_file(config_file_path):
+    """Read a YAML file of Kafka producer configuration details.
+
+    The file must have three top-level entries as shown:
+    ---
+        abort_run_on_kafka_exception: true
+        bootstrap_servers:
+            - kafka1:9092
+            - kafka2:9092
+        runengine_producer_config:
+            acks: 0
+            message.timeout.ms: 3000
+            compression.codec: snappy
+
+    Parameters
+    ----------
+    config_file_path: str
+        path to the YAML file of Kafka producer configuration details
+
+    Returns
+    -------
+    dict of configuration details
+    """
+    import yaml
+
+    # read the Kafka Producer configuration details
+    if Path(config_file_path).exists():
+        with open(config_file_path) as f:
+            bluesky_kafka_config = yaml.safe_load(f)
+    else:
+        raise FileNotFoundError(config_file_path)
+
+    required_sections = (
+        "abort_run_on_kafka_exception",
+        "bootstrap_servers",
+        # "producer_consumer_security_config",  not required yet
+        "runengine_producer_config",
+    )
+    missing_required_sections = [
+        required_section for required_section in required_sections if required_section not in bluesky_kafka_config
+    ]
+
+    if missing_required_sections:
+        raise Exception(
+            f"Bluesky Kafka configuration file '{config_file_path}' is missing required section(s) "
+            f"{missing_required_sections}"
+        )
+
+    return bluesky_kafka_config
 
 
 def read_kafka_configuration(kafka_config_path=None):
@@ -86,6 +137,9 @@ def main(argv=None):
         kafka_topics = args.kafka_topics.split(",")
         kafka_topics = [_.strip() for _ in kafka_topics]
         kafka_topics = [_ for _ in kafka_topics if _]  # Removes empty strings
+
+        print(f"kafka_servers: {kafka_servers}")
+        print(f"kafka_topics: {kafka_topics}")
 
         if kafka_servers and kafka_topics:
             source = {
