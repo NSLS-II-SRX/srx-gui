@@ -15,10 +15,9 @@ from bluesky import RunEngine
 
 RE = RunEngine()
 
-from databroker import Broker
-
-db = Broker.named("srx")
-RE.subscribe(db.insert)
+# from databroker import Broker
+# db = Broker.named("srx")
+# RE.subscribe(db.insert)
 
 from bluesky import SupplementalData
 
