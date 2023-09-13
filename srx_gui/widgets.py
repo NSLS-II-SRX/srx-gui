@@ -15,6 +15,7 @@ from bluesky_widgets.qt.run_engine_client import (
     QtRePlanHistory,
     QtReRunningPlan,
     QtRePlanEditor,
+    QtReConsoleMonitor,
 )
 from qtpy.QtWidgets import (
     QWidget,
@@ -154,6 +155,31 @@ class QtSearchAndView(QWidget):
         layout.addLayout(plot_layout)
 
 
+class QtRunExperimentLower(QSplitter):
+    def __init__(self, model, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.model = model
+
+        self.setOrientation(Qt.Horizontal)
+
+        self._frame_1 = QFrame(self)
+        self._frame_2 = QFrame(self)
+
+        self.addWidget(self._frame_1)
+        self.addWidget(self._frame_2)
+
+        vbox1 = QVBoxLayout()
+        vbox1.setContentsMargins(0, 0, 0, 0)
+        vbox1.addWidget(QtReRunningPlan(model.run_engine), stretch=1)
+        vbox1.addWidget(QtRePlanQueue(model.run_engine), stretch=2)
+        self._frame_1.setLayout(vbox1)
+
+        vbox2 = QVBoxLayout()
+        vbox2.setContentsMargins(0, 0, 0, 0)
+        vbox2.addWidget(QtFigures(model.live_auto_plot_builder.figures))
+        self._frame_2.setLayout(vbox2)
+
+
 class QtRunExperiment(QWidget):
     def __init__(self, model, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -169,19 +195,43 @@ class QtRunExperiment(QWidget):
         hbox.addStretch()
         vbox.addLayout(hbox)
 
-        hbox = QHBoxLayout()
+        qt_run_experiment_lower = QtRunExperimentLower(model)
+        vbox.addWidget(qt_run_experiment_lower, stretch=1)
+
+        self.setLayout(vbox)
+
+
+class QtMonitorExperiment(QSplitter):
+    def __init__(self, model, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.model = model
+
+        self.setOrientation(Qt.Horizontal)
+
+        self._frame_1 = QFrame(self)
+        self._frame_2 = QFrame(self)
+
+        self.addWidget(self._frame_1)
+        self.addWidget(self._frame_2)
 
         vbox1 = QVBoxLayout()
-        vbox1.addWidget(QtReRunningPlan(model.run_engine), stretch=1)
-        vbox1.addWidget(QtRePlanQueue(model.run_engine), stretch=2)
-        hbox.addLayout(vbox1)
-        vbox2 = QVBoxLayout()
-        vbox2.addWidget(QtFigures(model.live_auto_plot_builder.figures))
-        # vbox2.addWidget(QtRePlanEditor(model), stretch=1)
-        hbox.addLayout(vbox2)
+        vbox1.setContentsMargins(0, 0, 0, 0)
 
-        vbox.addLayout(hbox)
-        self.setLayout(vbox)
+        hbox = QHBoxLayout()
+        vbox1.setContentsMargins(0, 0, 0, 0)
+        hbox.addStretch()
+        hbox.addWidget(QtReEnvironmentControls(model.run_engine))
+        hbox.addWidget(QtReQueueControls(model.run_engine))
+        hbox.addWidget(QtReExecutionControls(model.run_engine))
+        hbox.addStretch()
+        vbox1.addLayout(hbox)
+        vbox1.addWidget(QtReConsoleMonitor(model.run_engine))
+        self._frame_1.setLayout(vbox1)
+
+        vbox2 = QVBoxLayout()
+        vbox2.setContentsMargins(0, 0, 0, 0)
+        vbox2.addWidget(QtFigures(model.live_auto_plot_builder.figures))
+        self._frame_2.setLayout(vbox2)
 
 
 class QtOrganizeQueueLeft(QSplitter):
@@ -195,19 +245,20 @@ class QtOrganizeQueueLeft(QSplitter):
         # self._frame_top.setFrameShape(QFrame.StyledPanel)
 
         self._frame_bottom = QFrame(self)
-        self._frame_bottom.setFrameShape(QFrame.StyledPanel)
+        # self._frame_bottom.setFrameShape(QFrame.StyledPanel)
 
         # self.addWidget(self._frame_top)
         self.addWidget(self._frame_bottom)
 
-        self._plan_history = QtRePlanQueue(model)
+        self._plan_queue = QtRePlanQueue(model)
 
         # vbox = QVBoxLayout()
         # vbox.addWidget(self._plan_editor, stretch=1)
         # self._frame_top.setLayout(vbox)
 
         vbox = QVBoxLayout()
-        vbox.addWidget(self._plan_history, stretch=1)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.addWidget(self._plan_queue, stretch=1)
         self._frame_bottom.setLayout(vbox)
 
         h = self.sizeHint().height()
@@ -222,10 +273,10 @@ class QtOrganizeQueueRight(QSplitter):
         self.setOrientation(Qt.Vertical)
 
         self._frame_top = QFrame(self)
-        self._frame_top.setFrameShape(QFrame.StyledPanel)
+        # self._frame_top.setFrameShape(QFrame.StyledPanel)
 
         self._frame_bottom = QFrame(self)
-        self._frame_bottom.setFrameShape(QFrame.StyledPanel)
+        # self._frame_bottom.setFrameShape(QFrame.StyledPanel)
 
         self.addWidget(self._frame_top)
         self.addWidget(self._frame_bottom)
@@ -234,10 +285,12 @@ class QtOrganizeQueueRight(QSplitter):
         self._plan_history = QtRePlanHistory(model)
 
         vbox = QVBoxLayout()
+        vbox.setContentsMargins(0, 0, 0, 0)
         vbox.addWidget(self._plan_editor, stretch=1)
         self._frame_top.setLayout(vbox)
 
         vbox = QVBoxLayout()
+        vbox.setContentsMargins(0, 0, 0, 0)
         vbox.addWidget(self._plan_history, stretch=1)
         self._frame_bottom.setLayout(vbox)
 
@@ -253,22 +306,27 @@ class QtOrganizeQueueSplitter(QSplitter):
         self.setOrientation(Qt.Horizontal)
 
         self._frame_left = QFrame(self)
-        self._frame_left.setFrameShape(QFrame.StyledPanel)
+        # self._frame_left.setFrameShape(QFrame.StyledPanel)
 
         self._frame_right = QFrame(self)
-        self._frame_right.setFrameShape(QFrame.StyledPanel)
+        # self._frame_right.setFrameShape(QFrame.StyledPanel)
 
         self.addWidget(self._frame_left)
         self.addWidget(self._frame_right)
 
-        self._plan_editor = QtOrganizeQueueLeft(model)
+        self._left_splitter = QtOrganizeQueueLeft(model)
         self._right_splitter = QtOrganizeQueueRight(model)
+        self._left_splitter._plan_queue.registered_item_editors.append(
+            self._right_splitter._plan_editor.edit_queue_item
+        )
 
         vbox = QVBoxLayout()
-        vbox.addWidget(self._plan_editor, stretch=1)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.addWidget(self._left_splitter, stretch=1)
         self._frame_left.setLayout(vbox)
 
         vbox = QVBoxLayout()
+        vbox.setContentsMargins(0, 0, 0, 0)
         vbox.addWidget(self._right_splitter, stretch=1)
         self._frame_right.setLayout(vbox)
 
@@ -304,6 +362,9 @@ class QtViewer(QTabWidget):
 
         self._run_experiment = QtRunExperiment(RunAndView(model.run_engine, model.live_auto_plot_builder))
         self.addTab(self._run_experiment, "Run Experiment")
+
+        self._monitor_experiment = QtMonitorExperiment(RunAndView(model.run_engine, model.live_auto_plot_builder))
+        self.addTab(self._monitor_experiment, "Monitor")
 
         self._organize_queue = QtOrganizeQueue(model.run_engine)
         self.addTab(self._organize_queue, "Organize Queue")
