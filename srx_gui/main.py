@@ -112,6 +112,15 @@ def main(argv=None):
         "used if the parameter or the environment variable are not specified.",
     )
     parser.add_argument(
+        "--http-server-uri",
+        default=None,
+        help="Address of HTTP Server, e.g. 'http://localhost:60610'. Activates communication "
+        "with Queue Server via HTTP server. If the address is passed as a CLI parameter, "
+        "it overrides the address specified with QSERVER_HTTP_SERVER_URI environment variable. "
+        "Use QSERVER_HTTP_SERVER_API_KEY environment variable to pass an API key for authorization.",
+    )
+
+    parser.add_argument(
         "--zmq-data-addr",
         default=None,
         help="Address of PUB-SUB socket with published document stream",
@@ -142,6 +151,11 @@ def main(argv=None):
     zmq_info_addr = args.zmq_info_addr
     zmq_info_addr = zmq_info_addr or os.environ.get("QSERVER_ZMQ_INFO_ADDRESS", None)
 
+    http_server_uri = args.http_server_uri
+    http_server_uri = http_server_uri or os.environ.get("QSERVER_HTTP_SERVER_URI", None)
+
+    http_server_api_key = os.environ.get("QSERVER_HTTP_SERVER_API_KEY", None)
+
     with gui_qt("SRX GUI"):
         if args.catalog:
             import databroker
@@ -152,8 +166,18 @@ def main(argv=None):
         if args.zmq_data_addr:
             SETTINGS.subscribe_to.append({"protocol": "zmq", "zmq_addr": args.zmq_data_addr})
 
-        SETTINGS.zmq_control_addr = args.zmq_control_addr
-        SETTINGS.zmq_info_addr = args.zmq_info_addr
+        if http_server_uri:
+            print("Initializing: communication with Queue Server via HTTP Server ...")
+            SETTINGS.http_server_uri = http_server_uri
+            SETTINGS.http_server_api_key = http_server_api_key
+            SETTINGS.zmq_re_manager_control_addr = None
+            SETTINGS.zmq_re_manager_info_addr = None
+        else:
+            print("Initializing: communication with Queue Server directly via 0MQ sockets ...")
+            SETTINGS.http_server_uri = None
+            SETTINGS.http_server_api_key = None
+            SETTINGS.zmq_re_manager_control_addr = zmq_control_addr
+            SETTINGS.zmq_re_manager_info_addr = zmq_info_addr
 
         # Use default path if it is not specififed
         kafka_config_path = args.kafka_config_path or None
