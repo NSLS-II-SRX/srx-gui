@@ -42,6 +42,7 @@ class Settings:
     columns = columns
     catalog = None
     subscribe_to = []
+    zmq_info_addr = None
 
 
 SETTINGS = Settings()

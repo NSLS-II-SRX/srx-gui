@@ -30,7 +30,10 @@ class ViewerModel:
         # auto_plot_builder for databroker plotting
         self.databroker_auto_plot_builder = AutoSRXPlot()
 
-        self.run_engine = RunEngineClient(zmq_control_addr=os.environ.get("QSERVER_ZMQ_CONTROL_ADDRESS", None))
+        self.run_engine = RunEngineClient(
+            zmq_control_addr=SETTINGS.zmq_control_addr,
+            zmq_info_addr=SETTINGS.zmq_info_addr,
+        )
 
 
 class Viewer(ViewerModel):

@@ -95,7 +95,27 @@ def main(argv=None):
     print(__doc__)
 
     parser = argparse.ArgumentParser(description="SRX GUI: acquisition GUI for NSLS-II SRX beamline")
-    parser.add_argument("--zmq", help="0MQ address")
+    parser.add_argument(
+        "--zmq-control-addr",
+        default=None,
+        help="Address of control socket of RE Manager, e.g. tcp://localhost:60615. "
+        "If the address is passed as a CLI parameter, it overrides the address specified with "
+        "QSERVER_ZMQ_CONTROL_ADDRESS environment variable. Default address is "
+        "used if the parameter or the environment variable are not specified.",
+    )
+    parser.add_argument(
+        "--zmq-info-addr",
+        default=None,
+        help="Address of PUB-SUB socket of RE Manager, e.g. 'tcp://localhost:60625'. "
+        "If the address is passed as a CLI parameter, it overrides the address specified with "
+        "QSERVER_ZMQ_INFO_ADDRESS environment variable. Default address is "
+        "used if the parameter or the environment variable are not specified.",
+    )
+    parser.add_argument(
+        "--zmq-data-addr",
+        default=None,
+        help="Address of PUB-SUB socket with published document stream",
+    )
     parser.add_argument(
         "--kafka-config-path",
         default=None,
@@ -116,6 +136,13 @@ def main(argv=None):
     parser.add_argument("--catalog", help="Databroker catalog")
     args = parser.parse_args(argv)
 
+
+    zmq_control_addr = args.zmq_control_addr
+    zmq_control_addr = zmq_control_addr or os.environ.get("QSERVER_ZMQ_CONTROL_ADDRESS", None)
+
+    zmq_info_addr = args.zmq_info_addr
+    zmq_info_addr = zmq_info_addr or os.environ.get("QSERVER_ZMQ_INFO_ADDRESS", None)
+
     with gui_qt("SRX GUI"):
         if args.catalog:
             import databroker
@@ -123,8 +150,11 @@ def main(argv=None):
             SETTINGS.catalog = databroker.catalog[args.catalog]
 
         # Optional: Receive live streaming data.
-        if args.zmq:
-            SETTINGS.subscribe_to.append({"protocol": "zmq", "zmq_addr": args.zmq})
+        if args.zmq_data_addr:
+            SETTINGS.subscribe_to.append({"protocol": "zmq", "zmq_addr": args.zmq_data_addr})
+
+        SETTINGS.zmq_control_addr = args.zmq_control_addr
+        SETTINGS.zmq_info_addr = args.zmq_info_addr
 
         # Use default path if it is not specififed
         kafka_config_path = args.kafka_config_path or None
