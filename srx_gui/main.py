@@ -136,7 +136,6 @@ def main(argv=None):
     parser.add_argument("--catalog", help="Databroker catalog")
     args = parser.parse_args(argv)
 
-
     zmq_control_addr = args.zmq_control_addr
     zmq_control_addr = zmq_control_addr or os.environ.get("QSERVER_ZMQ_CONTROL_ADDRESS", None)
 
